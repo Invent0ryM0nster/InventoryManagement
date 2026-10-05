@@ -1,0 +1,96 @@
+# ventrack
+
+A desktop inventory management app for tracking items, categories, and stock movements. Built with Electron, React, and TypeScript, with all data stored in an embedded Postgres database (PGlite/WASM) that runs inside the app itself — no server, no network setup, no external database to install.
+
+## Features
+
+- **Items & categories** — organize stock by category, with per-item unit and minimum-quantity thresholds
+- **Stock movements** — every quantity change is recorded as an `in`, `out`, or `adjust` (recount) movement; an item's quantity is always derived from its movement history, never edited directly, so the numbers stay auditable
+- **Low-stock tracking** — see at a glance which items have fallen below their minimum quantity
+- **Multi-user accounts** — login-gated access with per-user accounts (see the Users window once logged in)
+- **Backups** — export the current inventory to Excel, or export a raw SQL dump, from the Settings window
+- **Offline-first** — the database is a local file; the app works fully without an internet connection
+
+## Tech stack
+
+- [Electron](https://www.electronjs.org/) + [electron-vite](https://electron-vite.org/) for the desktop shell and build pipeline
+- [React 19](https://react.dev/) + TypeScript for the UI, with [winbox](https://github.com/nextapps-de/winbox)-based draggable/resizable windows for each feature area
+- [PGlite](https://pglite.dev/) (Postgres compiled to WASM) + [Drizzle ORM](https://orm.drizzle.team/) for the embedded database and schema/migrations
+- [Vitest](https://vitest.dev/) for tests, [ESLint](https://eslint.org/) + [Prettier](https://prettier.io/) for linting/formatting
+
+For a deeper look at how the pieces fit together — the main/preload/renderer process split, the database → services → IPC call chain, and the auth model — see `CLAUDE.md`. Domain terminology and design decisions are documented in `CONTEXT.md`.
+
+## Getting started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 20+ and npm
+
+### Install
+
+```bash
+npm install
+```
+
+### Run in development
+
+```bash
+npm run dev
+```
+
+This opens the app with hot module reloading. On first launch against a fresh (empty) database, a default `admin` / `admin123` account is auto-seeded — log in with it, then change the password from the Users window. To create or manage accounts from the command line instead:
+
+```bash
+npm run db:seed-user -- <username> <password>
+```
+
+### Lint, format, and typecheck
+
+```bash
+npm run lint
+npm run format
+npm run typecheck
+```
+
+### Run tests
+
+```bash
+npm test                                                          # full suite
+npx vitest run src/main/db/repositories/items.repository.test.ts  # a single file
+npx vitest run -t "rejects an \"out\" movement"                   # by test name
+```
+
+### Build a package for your platform
+
+```bash
+npm run build:win     # Windows
+npm run build:mac     # macOS
+npm run build:linux   # Linux
+```
+
+A packaged build has no terminal to run `db:seed-user` from, so an admin account can still be seeded on an installed copy via:
+
+```bash
+Ventrack.exe --seed-user <username> <password>
+```
+
+(or the equivalent app binary on macOS/Linux)
+
+## Recommended IDE setup
+
+[VSCode](https://code.visualstudio.com/) with the [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) and [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) extensions.
+
+## Project structure
+
+```
+src/
+  main/        # Electron main process: owns the database entirely
+    db/          # Drizzle schema, migrations, repositories (one per aggregate)
+    services/    # business logic between repositories and IPC
+    ipc/         # ipcMain handlers, one file per aggregate
+  preload/     # contextBridge script exposing a typed `window.api`
+  renderer/    # React UI (windows, components, theming)
+  shared/      # types/constants shared between main and renderer (IPC channels)
+```
+
+See `CLAUDE.md` for the full breakdown of each layer and the conventions to follow when extending them.

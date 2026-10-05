@@ -1,0 +1,93 @@
+import { describe, expect, it } from 'vitest'
+import { createTestDb } from '../testDb'
+import { seedUser } from '../testFixtures'
+import {
+  createCategory,
+  deleteCategory,
+  getCategory,
+  listCategories,
+  updateCategory
+} from './categories.repository'
+import { createItem } from './items.repository'
+
+describe('listCategories', () => {
+  it('returns an empty result when there are no categories', async () => {
+    const db = await createTestDb()
+
+    expect(await listCategories(db)).toEqual({ categories: [], total: 0 })
+  })
+
+  it('orders alphabetically by name and paginates', async () => {
+    const db = await createTestDb()
+    await createCategory(db, { name: 'Snacks' })
+    await createCategory(db, { name: 'Beverages' })
+    await createCategory(db, { name: 'Condiments' })
+
+    const firstPage = await listCategories(db, { page: 1, pageSize: 2 })
+    expect(firstPage.total).toBe(3)
+    expect(firstPage.categories.map((c) => c.name)).toEqual(['Beverages', 'Condiments'])
+
+    const secondPage = await listCategories(db, { page: 2, pageSize: 2 })
+    expect(secondPage.categories.map((c) => c.name)).toEqual(['Snacks'])
+  })
+})
+
+describe('createCategory', () => {
+  it('creates a category and returns it', async () => {
+    const db = await createTestDb()
+
+    const category = await createCategory(db, { name: 'Beverages' })
+
+    expect(category).toMatchObject({ name: 'Beverages' })
+    expect((await listCategories(db)).total).toBe(1)
+  })
+})
+
+describe('getCategory', () => {
+  it('returns the category by id', async () => {
+    const db = await createTestDb()
+    const created = await createCategory(db, { name: 'Beverages' })
+
+    expect(await getCategory(db, created.id)).toMatchObject({ id: created.id, name: 'Beverages' })
+  })
+
+  it('returns undefined when the category does not exist', async () => {
+    const db = await createTestDb()
+
+    expect(await getCategory(db, 999)).toBeUndefined()
+  })
+})
+
+describe('updateCategory', () => {
+  it('updates the name and returns the updated category', async () => {
+    const db = await createTestDb()
+    const created = await createCategory(db, { name: 'Beverages' })
+
+    const updated = await updateCategory(db, created.id, { name: 'Drinks' })
+
+    expect(updated).toMatchObject({ id: created.id, name: 'Drinks' })
+  })
+})
+
+describe('deleteCategory', () => {
+  it('removes the category', async () => {
+    const db = await createTestDb()
+    const created = await createCategory(db, { name: 'Beverages' })
+
+    await deleteCategory(db, created.id)
+
+    expect(await listCategories(db)).toEqual({ categories: [], total: 0 })
+  })
+
+  it('rejects deleting a category with existing items', async () => {
+    const db = await createTestDb()
+    const created = await createCategory(db, { name: 'Beverages' })
+    const user = await seedUser(db)
+    await createItem(db, { name: 'Coffee Beans', categoryId: created.id, createdBy: user.id })
+
+    await expect(deleteCategory(db, created.id)).rejects.toThrow(
+      'Cannot delete a category with existing items'
+    )
+    expect(await getCategory(db, created.id)).toMatchObject({ id: created.id })
+  })
+})
